@@ -1,2 +1,1 @@
-# 2020_01_01discretization
-discretization relavant codes
+# watershed discretization project relevant scripts

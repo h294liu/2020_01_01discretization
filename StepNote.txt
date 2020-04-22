@@ -1,0 +1,20 @@
+1. download DEM data 
+    source: https://viewer.nationalmap.gov/basic/#productSearch
+    resolution: 1/3 arc-second DEM (around 10 meters)
+2. clip useful DEM based on lat/lon limits
+    tool: gdal in Linux
+3. generate subbasin 
+    flow accumulation treshold=15,000 grid cells
+    tool: Ming Han's WatershedDelineationToolbox (ArcGIS on Windows)
+4. clip the watershed DEM
+5. calculate the Sx of the raw DEM
+    Note: (1) When use buffered DEM and extract useful grids based on the raw grids, since both raw and buffered DEM are in UTM projection (for slope and aspect calculation), we cannot use lat/lon to locate the useful buffered DEM sub-region. In UTM projection, the grids in the same row have different latitude values, similarly, the grids in the same column have different longitude values. However, their UTM coordinates (in meter) are the same for each row and column. Therefore, we need to use utm coordinates to locate usedfule sub-region.
+    (2) Given the way that slope and aspect are calcualted, the marginal grid cells don't have slope and aspect values, and thus are masked in slope/aspect calcualtion output.
+ 
+ 6. calculate the Sw of the raw DEM
+     Note: (1) Because of the second note in step5, when calcualte Sw using slope and aspect, the mask of elevation, slope, and aspect are based on the slope mask.
+     (2) For slope=0 grids, aspect=-1 (essentially no value). Therefore, aspect raster has more masked grids than slope. However, this will not affect Sw calculation because the Sw calculation equations treat slope=0 in a special way, so the aspect=-1 is not accepted.
+     (3) In Sw_function.py, we cannot use masked array to save a raster, because gdal cannot recognize mask of the masked array. gdal can only take nan of the array as nan. Therefore, before saving a raster, we need to get the data of the masked array and replace all masked grids with nan. In this way, gdal can then fill nan with user-specified nodata value (e.g., -9999).  
+
+7. discretize grids
+    tool: gdal in Linux
