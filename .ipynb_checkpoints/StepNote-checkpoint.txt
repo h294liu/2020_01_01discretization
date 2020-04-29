@@ -1,0 +1,33 @@
+1. download DEM data 
+    source: https://viewer.nationalmap.gov/basic
+    (NO resolution: 1/3 arc-second DEM (around 10 meters))
+    resolution: 1 arc-second DEM (around 30 meters)
+    1 arc-second – This is a lower resolution seamless dataset providing complete coverage over the conterminous U.S. and partial coverage of Alaska. Most of Canada and Mexico are also covered by the 1 arc-second dataset. Ground spacing is approximately 30 meters north/south, but variable east/west depending on latitude.
+    
+2. clip useful DEM based on lat/lon limits
+    tool: gdal in Linux
+    
+3. generate subbasin 
+    HUC12
+    
+4. clip the watershed DEM
+
+5. calculate slope
+    tool: gdal
+    
+6. calculate aspect
+    tool: arcgis. 
+    (1) gdal does not treat masked nondata grids differently from flat slope grids (apsect = -1 in acrgis). Therefore, here use arcgis to calculate aspect.
+    
+5. calculate the Sx of the raw DEM
+    (1) Raw and buffered DEM are projected to UTM projection for slope and aspect calculation. For this reason, we cannot use lat/lon, but need to use utm coordinates, to locate the useful DEM sub-region. In UTM projection, the grids in the same row have different latitude values, similarly, the grids in the same column have different longitude values. However, their UTM coordinates (in meter) are the same for each row and column. Therefore, we need to use utm coordinates to locate usedfule sub-region.
+    (2) Given the way that slope and aspect are calcualted, the marginal grid cells don't have slope and aspect values. Sx is calculated with 100m buffer distance and then is clipped by watershed shapefile. The purpose of doing this is to maintain as many as margin grids that have sx values. This Sx is then used for zonal statistics in HRU discretization.
+ 
+ 6. calculate the Sw of the raw DEM
+    (1) Because the marginal grid cells don't have slope and aspect values, when calcualte Sw using slope and aspect, the mask of elevation, slope, and aspect are based on the slope mask.
+     (2) For slope=0 grids, aspect=-1 (essentially no value). Therefore, aspect raster has more masked grids than slope. However, this will not affect Sw calculation because the Sw calculation equations treat slope=0 in a special way, so the aspect=-1 is not accepted.
+     (3) In Sw_function.py, we cannot use masked array to save a raster, because gdal cannot recognize mask of the masked array. gdal can only take nan of the array as nan. Therefore, before saving a raster, we need to get the data of the masked array and replace all masked grids with nan. In this way, gdal can then fill nan with user-specified nodata value (e.g., -9999).  
+
+7. discretize HRU
+    tool: gdal in Linux
+    (1) Because marginal grids don't have slope, aspect, and Sx values, and clip raster sometimes also miss marginal grids, 100m buffered slope & aspect rasters, land use class & elevation class shapefile, and sx raster are used to union-> discretize HRU. 
