@@ -2,16 +2,18 @@
 set -e
 
 # This script is to merge DEM rasters and clip useful domain
-work_dir=/glade/u/home/hongli/work/research/discretization/scripts
+work_dir=/glade/u/home/hongli/work/research/discretization/optimize_hru/model
 input_dir=${work_dir}/input
-slp_file=${input_dir}/slope.tif
-asp_file=${input_dir}/aspect.tif
+slp_file=${input_dir}/slope_buf_100m.tif
+asp_file=${input_dir}/aspect_buf_100m.tif
 sx_file=${input_dir}/sx.tif
 nodata=-9999
 sub_shp=${input_dir}/subbasin
 sub_shp_prj=${input_dir}/sub_prj
 elev_file=${input_dir}/elev_class
 land_file=${input_dir}/land_class
+
+sub_dir=/glade/u/home/hongli/work/research/discretization/scripts/shapefile/subbasin_prj
 
 s_srs=EPSG:4269 # Source CRS: NAD83. Valid for both DEM.tif and HUC12 shp. 
 t_srs=EPSG:26913 #'+proj=utm +zone=13 +datum=NAD83' # Reproject/transform to this SRS on output.
@@ -25,59 +27,93 @@ asp_thrsh3=180
 asp_thrsh4=240
 asp_thrsh5=320
 
+temp_folder=${work_dir}/temp
+if [ ! -d $temp_folder ]; then mkdir -p $temp_folder; fi
 ofolder=${work_dir}/output
 if [ ! -d $ofolder ]; then mkdir -p $ofolder; fi
 
 slp_class_raster=slp_class.tif
-slp_shp=slp_class_raw
-slp_disslv_shp=slp_class
+slp_raw_shp=slp_class_raw
+slp_shp=slp_class
 
 asp_class_raster=asp_class.tif
-asp_shp=asp_class_raw
-asp_disslv_shp=asp_class
+asp_raw_shp=asp_class_raw
+asp_shp=asp_class
 
 # load module
 module unload netcdf
 module gdal
 
-cd ${ofolder}
-# =====================split subabsin=========================
-echo split subabsin
-# (1) project subbasin.shp to UTM 13N   
-if [ ! -f ${sub_shp_prj} ]; then 
-ogr2ogr -t_srs ${t_srs} -f "ESRI Shapefile" ${sub_shp_prj}.shp ${sub_shp}.shp 
-fi
+cd ${temp_folder}
 
-# # (2) split subbasin.shp into subbasins
-# ogr2ogr -clipsrc spat_extent -clipsrcwhere
+# # =====================reclassify slope=========================
+# echo reclassify slope
+# # slope range is [0,79]. Three thresholds: slp_thrsh1, slp_thrsh2, slp_thrsh3.
+# if [ -f ${slp_class_raster} ]; then rm ${slp_class_raster}; fi 
+# gdal_calc.py -A ${slp_file} --outfile=${slp_class_raster} --calc="1*((A>=0)*(A<=${slp_thrsh1}))+2*((A>${slp_thrsh1})*(A<=${slp_thrsh2}))+3*((A>${slp_thrsh2})*(A<=${slp_thrsh3}))+4*((A>${slp_thrsh3})*(A<=79))" --NoDataValue=${nodata} --quiet
 
-# =====================reclassify slope=========================
-echo reclassify slope
-for file in ${slp_class_raster} ${slp_shp}.shp ${slp_disslv_shp}.shp; do if [ -f ${file} ]; then rm ${file}; fi; done  
+# # =====================reclassify aspect=========================
+# echo reclassify aspect 
+# # aspect range is [0,360]. Five thresholds: slp_thrsh1, slp_thrsh2, slp_thrsh3,slp_thrsh4, slp_thrsh5.
+# if [ -f ${asp_class_raster} ]; then rm ${asp_class_raster}; fi  
+# gdal_calc.py -A ${asp_file} --outfile=${asp_class_raster} --calc="1*((A>=0)*(A<=${asp_thrsh1}))+2*((A>${asp_thrsh1})*(A<=${asp_thrsh2}))+3*((A>${asp_thrsh2})*(A<=${asp_thrsh3}))+4*((A>${asp_thrsh3})*(A<=${asp_thrsh4}))+5*((A>${asp_thrsh4})*(A<=${asp_thrsh5}))+6*((A>${asp_thrsh5})*(A<=360))" --NoDataValue=${nodata} --quiet
 
-# (1) reclassify
-# slope range is [0,79]. Three thresholds: slp_thrsh1, slp_thrsh2, slp_thrsh3.
-gdal_calc.py -A ${slp_file} --outfile=${slp_class_raster} --calc="1*((A>=0)*(A<=${slp_thrsh1}))+2*((A>${slp_thrsh1})*(A<=${slp_thrsh2}))+3*((A>${slp_thrsh2})*(A<=${slp_thrsh3}))+4*((A>${slp_thrsh3})*(A<=79))" --NoDataValue=${nodata} --quiet
+# # =====================subbasin process=========================
+# FILES=( $(ls ${sub_dir}/*.gpkg) )
+# FILE_NUM=${#FILES[@]}
+# for i in $(seq 0 $(($FILE_NUM -1))); do
+# # for i in $(seq 0 2); do
 
-# (2) save raster to shapefile
-gdal_polygonize.py ${slp_class_raster} -f "ESRI Shapefile" ${slp_shp}.shp
+#     # idenfiy subbasin name
+#     FilePath=${FILES[${i}]} 
+#     FileName=${FilePath##*/} # get basename of filename
+#     FileNameShort="${FileName/.gpkg/}" # remove suffix ".txt"
+#     echo $FileNameShort
+    
+#     # define files names
+#     sub_slp_raster=${FileNameShort}_slp.tif
+#     sub_asp_raster=${FileNameShort}_asp.tif
+#     sub_slp_shp=${FileNameShort}_slp
+#     sub_asp_shp=${FileNameShort}_asp
+#     sub_slp_disslv=${FileNameShort}_slp_disslv
+#     sub_asp_disslv=${FileNameShort}_asp_disslv 
 
-# (3) dissolve attribute
-ogr2ogr ${slp_disslv_shp}.shp ${slp_shp}.shp -dialect sqlite -sql "SELECT ST_Union(geometry), DN FROM ${slp_shp} GROUP BY DN"
+#     # (1) clip subbasin's slope and aspect  
+#     gdalwarp -t_srs ${t_srs} -cutline $FilePath -crop_to_cutline -srcnodata "-9999" -dstnodata "-9999" ${slp_class_raster} ${sub_slp_raster}
+    
+#     gdalwarp -t_srs ${t_srs} -cutline $FilePath -crop_to_cutline -srcnodata "-9999" -dstnodata "-9999" ${asp_class_raster} ${sub_asp_raster}
 
-# =====================reclassify aspect=========================
-echo reclassify aspect 
-for file in ${asp_class_raster} ${asp_shp}.shp ${asp_disslv_shp}.shp; do if [ -f ${file} ]; then rm ${file}; fi; done  
+#     # (2) save raster to shapefile
+#     gdal_polygonize.py ${sub_slp_raster} -f "ESRI Shapefile" ${sub_slp_shp}.shp "" "slope"
+#     gdal_polygonize.py ${sub_asp_raster} -f "ESRI Shapefile" ${sub_asp_shp}.shp "" "aspect"
 
-# (1) reclassify
-# aspect range is [0,360]. Five thresholds: slp_thrsh1, slp_thrsh2, slp_thrsh3,slp_thrsh4, slp_thrsh5.
-gdal_calc.py -A ${asp_file} --outfile=${asp_class_raster} --calc="1*((A>=0)*(A<=${asp_thrsh1}))+2*((A>${asp_thrsh1})*(A<=${asp_thrsh2}))+3*((A>${asp_thrsh2})*(A<=${asp_thrsh3}))+4*((A>${asp_thrsh3})*(A<=${asp_thrsh4}))+5*((A>${asp_thrsh4})*(A<=${asp_thrsh5}))+6*((A>${asp_thrsh5})*(A<=360))" --NoDataValue=${nodata} --quiet
+#     # (3) dissolve attribute
+#     echo dissolve ${FileNameShort} slope
+#     ogr2ogr -overwrite -f GPKG ${sub_slp_disslv}.gpkg ${sub_slp_shp}.shp -dialect sqlite -sql "SELECT ST_Union(geometry), slope FROM ${sub_slp_shp} GROUP BY slope"
 
-# (2) save raster to shapefile
-gdal_polygonize.py ${asp_class_raster} -f "ESRI Shapefile" ${asp_shp}.shp
+#     echo dissolve ${FileNameShort} aspect
+#     ogr2ogr -overwrite -f GPKG ${sub_asp_disslv}.gpkg ${sub_asp_shp}.shp -dialect sqlite -sql "SELECT ST_Union(geometry), aspect FROM ${sub_asp_shp} GROUP BY aspect"
 
-# (3) dissolve attribute
-ogr2ogr ${asp_disslv_shp}.shp ${asp_shp}.shp -dialect sqlite -sql "SELECT ST_Union(geometry), DN FROM ${asp_shp} GROUP BY DN"
+#     # remove unecessary files
+#     for file in ${sub_slp_raster} ${sub_asp_raster} ${sub_slp_shp}.* ${sub_asp_shp}.*; do 
+#         if [ -f ${file} ]; then rm -r ${file}; fi; 
+#     done
+    
+# done
+
+# merge all subbasins' slope and aspect
+echo merge all subbasins slope and aspect
+ogrmerge.py -overwrite_ds -f GPKG -o $slp_raw_shp.gpkg *_slp_disslv.gpkg -single -field_strategy Union
+ogrmerge.py -overwrite_ds -f GPKG -o $asp_raw_shp.gpkg *_asp_disslv.gpkg -single -field_strategy Union
+
+# ogrmerge.py -overwrite_ds -f "ESRI Shapefile" -o $slp_raw_shp.shp *_slp_disslv.gpkg -single -field_strategy Union
+# ogrmerge.py -overwrite_ds -f "ESRI Shapefile" -o $asp_raw_shp.shp *_asp_disslv.gpkg -single -field_strategy Union
+
+# # dissolve attribute
+# echo dissolve attribute
+# ogr2ogr -overwrite -f GPKG ${slp_shp}.gpkg ${slp_raw_shp}.shp -dialect sqlite -sql "SELECT ST_Union(geometry), slope FROM ${slp_raw_shp} GROUP BY slope" -unsetFieldWidth
+
+# ogr2ogr -overwrite -f GPKG ${asp_shp}.gpkg ${asp_raw_shp}.shp -dialect sqlite -sql "SELECT ST_Union(geometry), aspect FROM ${asp_raw_shp} GROUP BY aspect" -unsetFieldWidth
 
 cd ${work_dir}
 echo Done

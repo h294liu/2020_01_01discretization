@@ -78,7 +78,7 @@ module gdal
 # =====================project subbasin=========================
 echo project subbasin
 # project subbasin.shp to UTM 13N   
-if [ -f ${wtsh_shp_prj} ]; then rm ${wtsh_shp_prj}*; fi
+if [ -f ${sub_shp_prj} ]; then rm ${sub_shp_prj}*; fi
 ogr2ogr -t_srs ${t_srs} -f "ESRI Shapefile" ${sub_shp_prj}.shp ${sub_shp}.shp 
 
 echo Done
