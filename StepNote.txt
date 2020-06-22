@@ -16,5 +16,20 @@
      (2) For slope=0 grids, aspect=-1 (essentially no value). Therefore, aspect raster has more masked grids than slope. However, this will not affect Sw calculation because the Sw calculation equations treat slope=0 in a special way, so the aspect=-1 is not accepted.
      (3) In Sw_function.py, we cannot use masked array to save a raster, because gdal cannot recognize mask of the masked array. gdal can only take nan of the array as nan. Therefore, before saving a raster, we need to get the data of the masked array and replace all masked grids with nan. In this way, gdal can then fill nan with user-specified nodata value (e.g., -9999).  
 
+7. process landuse raster
+- resample landuse raster to be the same as DEM raster
+reason of doing this: in subbasin-based discretization, the clipped elevation, slope, aspect are have the same cell size, but landuse cell size is different. This will cause gap areas between subbasins. Landuse raster cell size is 30m, but DEM is 27.5m. Here we resample landuse by referening to DEM raster. 
+tool: QGIS Align Rasters tool 
+reference: https://gis.stackexchange.com/questions/277788/resampling-raster-based-on-mask-raster
+
+- Reclassify landuse
+- clip/divide into different subbasins
+
+8. process DEM
+- calcualte slope (use gdal)
+- calculate aspect with -1 (flat) (use ArcGIS)
+- convert aspect from [0,360] to [0,180]
+
+
 7. discretize grids
     tool: gdal in Linux

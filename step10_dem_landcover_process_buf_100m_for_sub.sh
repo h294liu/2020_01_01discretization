@@ -10,13 +10,12 @@ shp_dir=${work_dir}/shapefile
 wtsh_shp=watershed_buf_100m
 sub_dir=${work_dir}/shapefile/subbasin_prj
 
-land_dir=${work_dir}/shapefile/NLCD_2016_Land_Cover_L48_20190424
-land_file=NLCD_2016_Land_Cover_L48_20190424.img
+land_file=${work_dir}/shapefile/land_cover_resample/buff_100m_resample.tif
 
 s_srs=EPSG:4269 # Source CRS: NAD83. Valid for both DEM.tif and HUC12 shp. 
 t_srs=EPSG:26913 #'+proj=utm +zone=13 +datum=NAD83' # Reproject/transform to this SRS on output.
 
-ofolder=$work_dir/step10_prepare_disc_hru_buf_100m
+ofolder=$work_dir/step10_dem_landcover_process_buf_100m_for_sub
 if [ ! -d $ofolder ]; then mkdir -p $ofolder; fi
 
 for subfolder in elevation land; do
@@ -45,16 +44,16 @@ cd $ofolder
 echo reclassify elevation
 cd ${ofolder}/elevation
 
-# (1) reclassify
-# DEM range is [2037, 3764]. Recalssify interval is 250m.
-for file in ${elev_class_raster}; do if [ -f ${file} ]; then rm ${file}; fi; done  
-gdal_calc.py -A ${dem_file} --outfile=${elev_class_raster} --calc="2250*((A>2000)*(A<=2250))+2500*((A>2250)*(A<=2500))+2750*((A>2500)*(A<=2750))+3000*((A>2750)*(A<=3000))+3250*((A>3000)*(A<=3250))+3500*((A>3250)*(A<=3500))+3750*((A>3500)*(A<=3800))" --NoDataValue=${nodata} --quiet
+# # (1) reclassify
+# # DEM range is [2037, 3764]. Recalssify interval is 250m.
+# for file in ${elev_class_raster}; do if [ -f ${file} ]; then rm ${file}; fi; done  
+# gdal_calc.py -A ${dem_file} --outfile=${elev_class_raster} --calc="2250*((A>2000)*(A<=2250))+2500*((A>2250)*(A<=2500))+2750*((A>2500)*(A<=2750))+3000*((A>2750)*(A<=3000))+3250*((A>3000)*(A<=3250))+3500*((A>3250)*(A<=3500))+3750*((A>3500)*(A<=3800))" --NoDataValue=${nodata} --quiet
 
 # (2) subbasin process
 FILES=( $(ls ${sub_dir}/*.gpkg) )
 FILE_NUM=${#FILES[@]}
-# for i in $(seq 0 $(($FILE_NUM -1))); do
-for i in $(seq 0 2); do
+for i in $(seq 0 $(($FILE_NUM -1))); do
+# for i in $(seq 0 2); do
 
     # idenfiy subbasin name
     FilePath=${FILES[${i}]} 
@@ -68,10 +67,12 @@ for i in $(seq 0 2); do
     sub_elev_disslv=${FileNameShort}_elev_disslv
 
     # (1) clip subbasin's elev and land  
-    gdalwarp -cutline $FilePath -crop_to_cutline -srcnodata "-9999" -dstnodata "-9999" ${elev_class_raster} ${sub_elev_raster}
+    echo clip
+    gdalwarp -cutline $FilePath -srcnodata "-9999" -dstnodata "-9999" ${elev_class_raster} ${sub_elev_raster}
 
     # (2) save raster to shapefile
-    gdal_polygonize.py ${sub_elev_raster} -f "ESRI Shapefile" ${sub_elev_shp}.shp "" "elevation"
+    echo save
+    gdal_polygonize.py ${sub_elev_raster} -f "ESRI Shapefile" ${sub_elev_shp}.shp "" "elevation" #
 
     # (3) dissolve attribute
     echo dissolve ${FileNameShort} elevation
@@ -92,7 +93,7 @@ cd ${ofolder}/land
 for file in ${land_raster} ${land_class_raster}; do if [ -f ${file} ]; then rm ${file}; fi; done  
 
 # (1) clip
-gdalwarp -t_srs ${t_srs} -cutline ${shp_dir}/${wtsh_shp}.shp -crop_to_cutline -srcnodata "0" -dstnodata "0" ${land_dir}/${land_file} ${land_raster} 
+gdalwarp -t_srs ${t_srs} -cutline ${shp_dir}/${wtsh_shp}.shp -srcnodata "0" -dstnodata "0" ${land_file} ${land_raster} 
 
 # (2) reclassify
 # 10 Water. 20 Developed. 30 Barren. 40 Forest (42 evergreen forest). 50 Shrubland. 70 Herbaceous. 80 Planted/Cultivated. 90 Wetlands.
@@ -101,8 +102,8 @@ gdal_calc.py -A ${land_raster} --outfile=${land_class_raster} --calc="10*((A>=10
 # (3) subbasin process
 FILES=( $(ls ${sub_dir}/*.gpkg) )
 FILE_NUM=${#FILES[@]}
-# for i in $(seq 0 $(($FILE_NUM -1))); do
-for i in $(seq 0 2); do
+for i in $(seq 0 $(($FILE_NUM -1))); do
+# for i in $(seq 0 2); do
 
     # idenfiy subbasin name
     FilePath=${FILES[${i}]} 
@@ -115,10 +116,12 @@ for i in $(seq 0 2); do
     sub_land_shp=${FileNameShort}_land
     sub_land_disslv=${FileNameShort}_land_disslv 
 
-    # (1) clip subbasin's elev and land  
-    gdalwarp -cutline $FilePath -crop_to_cutline -srcnodata "-9999" -dstnodata "-9999" ${land_class_raster} ${sub_land_raster}
+    # (1) clip subbasin's land  
+    echo clip
+    gdalwarp -cutline $FilePath -srcnodata "-9999" -dstnodata "-9999" ${land_class_raster} ${sub_land_raster}
 
     # (2) save raster to shapefile
+    echo save
     gdal_polygonize.py ${sub_land_raster} -f "ESRI Shapefile" ${sub_land_shp}.shp "" "land"
 
     # (3) dissolve attribute
